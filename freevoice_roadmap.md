@@ -6,17 +6,19 @@ Prototype → usable, scalable, professional-grade AAC tool. This roadmap sequen
 
 - Single-file HTML/CSS/JS app, no build step, no backend
 - Data model: `localStorage['freevoice-state-v1']` = `{ currentCategory, categories: { [name]: Tile[] } }`
-- `Tile = { id, label, image?: dataURL, audio?: dataURL, emoji?: string }`
-- Talker Mode (tap to speak, sentence strip), Admin Mode (PIN-gated, add/delete tiles & categories)
-- Browser `SpeechSynthesis` for TTS, `MediaRecorder` for custom voice, file input w/ `capture="environment"` for photos
-- Fatigue filter (3 taps/5s → cooldown), print stylesheet, JSON export/import backup
+- `Tile = { id, label, image?: dataURL, audio?: dataURL, emoji?: string, position: {row,col}, partOfSpeech: string }`
+- Talker Mode (tap to speak, sentence strip, fixed 4x5 motor-planning grid), Admin Mode (PIN-gated, add/delete tiles & categories, rearrange grid, usage reports)
+- Browser `SpeechSynthesis` for TTS, `MediaRecorder` for custom voice, file input w/ `capture="environment"` for photos, ARASAAC symbol search
+- Fatigue filter (3 taps/5s → cooldown), print stylesheet, JSON backup export/import, Open Board Format (.obf) export/import
+- Usage logging (`localStorage['freevoice-log-v1']`) with Admin reports view + CSV export
+- Installable PWA: manifest.json, sw.js offline cache, fullscreen toggle
 - Deployed: GitHub repo `sumit2423/freevoice-`, GitHub Pages
 
 ---
 
-## Phase 1 — Low-lift wins (days each, build on existing code)
+## Phase 1 — Low-lift wins (days each, build on existing code) — ✅ SHIPPED 2026-07-18
 
-### 1.1 Open symbol library integration
+### 1.1 Open symbol library integration — ✅ done
 **Why:** Camera-only means every abstract word (feelings, verbs, concepts) requires the parent to stage and photograph something. Clinical-grade symbol sets solve this for free.
 
 **Steps:**
@@ -28,7 +30,7 @@ Prototype → usable, scalable, professional-grade AAC tool. This roadmap sequen
 
 **Effort:** ~1–2 days. **Data model change:** none — reuses the existing `image` field.
 
-### 1.2 Open Board Format (.obf/.obz) import/export
+### 1.2 Open Board Format (.obf/.obz) import/export — ✅ done (.obf only; .obz still pending)
 **Why:** .obf is the JSON schema used by Cboard, CoughDrop, TouchChat, and others. Supporting it means every publicly shared board (bathroom routines, feelings boards, school boards) becomes importable instantly, and your boards become portable to other tools.
 
 **Steps:**
@@ -40,7 +42,7 @@ Prototype → usable, scalable, professional-grade AAC tool. This roadmap sequen
 
 **Effort:** ~2–3 days for single-board .obf; +1 day for .obz.
 
-### 1.3 Fixed motor-planning grid
+### 1.3 Fixed motor-planning grid — ✅ done
 **Why:** LAMP's core clinical premise — buttons never change position — builds muscle memory over time. Right now tiles render in array order, so adding a new tile shifts everything after it.
 
 **Steps:**
@@ -51,7 +53,7 @@ Prototype → usable, scalable, professional-grade AAC tool. This roadmap sequen
 
 **Effort:** ~2 days. **Data model change:** add `position` to `Tile`.
 
-### 1.4 Parts-of-speech color coding (Fitzgerald key)
+### 1.4 Parts-of-speech color coding (Fitzgerald key) — ✅ done
 **Why:** De facto clinical standard (nouns = yellow, verbs = green, descriptors = blue, social words = pink, etc.) — nearly every SLP-designed board uses it, and it helps early sentence-structure learning.
 
 **Steps:**
@@ -62,7 +64,7 @@ Prototype → usable, scalable, professional-grade AAC tool. This roadmap sequen
 
 **Effort:** ~1 day.
 
-### 1.5 Usage logging + simple reports
+### 1.5 Usage logging + simple reports — ✅ done
 **Why:** SLPs and parents want to know what's actually being used — word frequency, session length, growth over time. Almost no open-source AAC tool does this well; it's a real differentiator and something therapists explicitly ask for at IEP meetings.
 
 **Steps:**
@@ -73,7 +75,7 @@ Prototype → usable, scalable, professional-grade AAC tool. This roadmap sequen
 
 **Effort:** ~2 days for logging + basic report; +1 day for CSV export and chart.
 
-### 1.6 Installable PWA + kiosk behavior
+### 1.6 Installable PWA + kiosk behavior — ✅ done (app-side; OS-level kiosk lock is still a manual parent step)
 **Why:** Solves "he swiped out of the app into the browser chrome" without needing native app store distribution.
 
 **Steps:**
