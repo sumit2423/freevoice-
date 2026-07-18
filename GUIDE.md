@@ -64,6 +64,8 @@ Both have matching **Import** buttons next to them.
 2. Use the browser menu → **Add to Home Screen** (this works because the app is an installable PWA).
 3. Launch it from the home screen icon from then on — it opens without the browser's address bar.
 
+**If you already installed it and it seems locked to landscape:** that was a real bug (fixed) — the manifest used to force landscape orientation. Unlike page code, some manifest properties (like orientation) get baked into the home-screen icon at install time on Android, so the update banner / refresh won't fix an already-installed icon. Remove the existing home screen icon and redo step 2 to pick up the fix.
+
 ## Locking the tablet to this app (kiosk mode)
 
 The app can't do this by itself — it's an OS-level setting:
