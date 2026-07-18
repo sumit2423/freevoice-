@@ -73,7 +73,11 @@ The app can't do this by itself — it's an OS-level setting:
 
 ## If a change doesn't show up after an update
 
-The app caches itself for offline use, which means an old cached copy can stick around on a device after you push a code update. If something looks stale:
+The app caches itself for offline use, which means an old cached copy can stick around on a device after you push a code update. As of the update-banner feature, this is mostly self-handling: when a device is online and a new version has been deployed, a small bar appears at the bottom of the screen — "A new version of FreeVoice is ready" — with a **Refresh now** button. Tap it (there's no browser address bar to use instead on a kiosk-locked device, so this is the way to pick up an update).
+
+If the banner doesn't appear and something still looks stale:
 
 - Close the app/tab fully and reopen it, or
 - In the browser, clear site data for the app's URL, then reload.
+
+(One-time note: any device that installed FreeVoice before the update banner shipped needs one manual force-close/reopen to pick up the code that adds the banner itself — after that, all future updates surface the banner automatically.)

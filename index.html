@@ -161,8 +161,19 @@
   #pinPad { display: grid; grid-template-columns: repeat(3, 64px); gap: 12px; }
   #pinPad button { width: 64px; height: 64px; border-radius: 50%; border: none; font-size: 22px; background: #2a3040; color: white; }
 
+  /* Update banner */
+  #updateBanner {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    background: #111827; color: white; padding: 10px 16px;
+    display: none; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px;
+  }
+  #updateBanner.show { display: flex; }
+  #updateBanner button { border: none; border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+  #updateReloadBtn { background: var(--accent); color: white; }
+  #updateDismissBtn { background: transparent; color: #9ca3af; font-size: 16px; padding: 4px 8px; }
+
   @media print {
-    #sentenceBar, #tabs, #gearBtn { display: none !important; }
+    #sentenceBar, #tabs, #gearBtn, #updateBanner { display: none !important; }
     body { background: white; }
     #grid { display: grid; grid-template-columns: repeat(5, 1fr); }
     .tile { border: 2px solid #999; break-inside: avoid; }
@@ -182,6 +193,14 @@
   </div>
   <div id="tabs"></div>
   <div id="grid"></div>
+</div>
+
+<div id="updateBanner">
+  <span>A new version of FreeVoice is ready.</span>
+  <span style="display:flex; gap:8px;">
+    <button id="updateReloadBtn">Refresh now</button>
+    <button id="updateDismissBtn" title="Dismiss">✕</button>
+  </span>
 </div>
 
 <div id="helpOverlay">
@@ -921,11 +940,26 @@
     reader.readAsText(file);
   };
 
-  // ---------- PWA service worker ----------
+  // ---------- PWA service worker + update banner ----------
   if ("serviceWorker" in navigator) {
+    const hadController = !!navigator.serviceWorker.controller;
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("./sw.js").catch(() => {});
     });
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      // Fires once on the very first install too (nothing to update to yet) — only
+      // show the banner when a controller was already active, i.e. a real update.
+      if (refreshing || !hadController) return;
+      document.getElementById("updateBanner").classList.add("show");
+    });
+    document.getElementById("updateReloadBtn").onclick = () => {
+      refreshing = true;
+      location.reload();
+    };
+    document.getElementById("updateDismissBtn").onclick = () => {
+      document.getElementById("updateBanner").classList.remove("show");
+    };
   }
 
 })();
