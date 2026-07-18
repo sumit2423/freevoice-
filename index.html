@@ -52,6 +52,13 @@
     border: none; cursor: pointer; flex-shrink: 0;
   }
 
+  /* On phone-width screens, five buttons plus the strip can't share one row —
+     give the sentence strip its own full-width row and wrap the buttons below it. */
+  @media (max-width: 700px) {
+    #sentenceBar { flex-wrap: wrap; min-height: 0; row-gap: 6px; }
+    #sentenceStrip { flex-basis: 100%; }
+  }
+
   /* Category tabs */
   #tabs {
     display: flex; gap: 6px; padding: 8px 10px; overflow-x: auto;
