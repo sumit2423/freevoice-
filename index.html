@@ -262,6 +262,7 @@
   </div>
 </div>
 
+<script src="./freevoice-core.js"></script>
 <script>
 (function () {
   "use strict";
@@ -271,13 +272,10 @@
   const LOG_KEY = "freevoice-log-v1";
   const DEFAULT_PIN = "1234";
   const COOLDOWN_TAPS = 3, COOLDOWN_WINDOW_MS = 5000, COOLDOWN_MS = 2200;
-  const GRID_ROWS = 4, GRID_COLS = 5;
-  const MAX_LOG = 5000;
-
-  const POS_COLORS = {
-    noun: "#f5c542", verb: "#5fd07a", descriptor: "#5fb0f0",
-    social: "#f582b8", pronoun: "#b08af0", question: "#f07a5f", other: "#c8cdd8"
-  };
+  const {
+    GRID_ROWS, GRID_COLS, MAX_LOG, POS_COLORS,
+    posKey, migrateState, nextEmptySlot, buildOBF, parseOBF, capLog, csvFromLog, logStats, topWords
+  } = FreeVoiceCore;
 
   const defaultState = {
     currentCategory: "Core Words",
@@ -296,7 +294,7 @@
   };
 
   let state = load();
-  migrateState();
+  migrateState(state);
   let tapLog = {}; // tileId -> [timestamps], in-memory fatigue filter (not the persisted usage log)
   let mediaRecorder = null, recordedChunks = [], pendingAudio = null, pendingImage = null;
 
@@ -309,38 +307,6 @@
   }
   function save() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }
-
-  function posKey(pos) { return pos.row + "," + pos.col; }
-
-  function migrateState() {
-    Object.keys(state.categories).forEach(cat => {
-      const tiles = state.categories[cat];
-      const used = new Set();
-      tiles.forEach(t => { if (t.position) used.add(posKey(t.position)); });
-      let cursor = 0;
-      tiles.forEach(t => {
-        if (!t.partOfSpeech) t.partOfSpeech = "other";
-        if (!t.position) {
-          while (used.has(posKey({ row: Math.floor(cursor / GRID_COLS), col: cursor % GRID_COLS }))) cursor++;
-          const p = { row: Math.floor(cursor / GRID_COLS), col: cursor % GRID_COLS };
-          t.position = p;
-          used.add(posKey(p));
-          cursor++;
-        }
-      });
-    });
-  }
-
-  function nextEmptySlot(catName) {
-    const tiles = state.categories[catName] || [];
-    const used = new Set(tiles.map(t => posKey(t.position)));
-    for (let r = 0; r < GRID_ROWS; r++) {
-      for (let c = 0; c < GRID_COLS; c++) {
-        if (!used.has(r + "," + c)) return { row: r, col: c };
-      }
-    }
-    return null;
   }
 
   function downloadBlob(content, mime, filename) {
@@ -391,7 +357,7 @@
     let log = [];
     try { log = JSON.parse(localStorage.getItem(LOG_KEY) || "[]"); } catch (e) {}
     log.push({ tileId: tile.id, label: tile.label, category: state.currentCategory, ts: Date.now() });
-    if (log.length > MAX_LOG) log = log.slice(log.length - MAX_LOG);
+    log = capLog(log, MAX_LOG);
     localStorage.setItem(LOG_KEY, JSON.stringify(log));
   }
 
@@ -688,7 +654,7 @@
   document.getElementById("saveTileBtn").onclick = () => {
     const label = document.getElementById("tileLabel").value.trim();
     if (!label) { alert("Please enter a label"); return; }
-    const slot = nextEmptySlot(state.currentCategory);
+    const slot = nextEmptySlot(state.categories[state.currentCategory]);
     if (!slot) { alert("This board is full (20 tiles). Delete a tile or rearrange first."); return; }
     const tile = {
       id: "t" + Date.now(),
@@ -814,12 +780,8 @@
 
   function renderReports() {
     const log = readLog();
-    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const totalAll = log.length;
-    const totalWeek = log.filter(e => e.ts >= weekAgo).length;
-    const counts = {};
-    log.forEach(e => { counts[e.label] = (counts[e.label] || 0) + 1; });
-    const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const { totalAll, totalWeek } = logStats(log);
+    const top = topWords(log, 10);
     const maxCount = top.length ? top[0][1] : 1;
 
     const el = document.getElementById("reportsContent");
@@ -838,11 +800,7 @@
   }
 
   document.getElementById("exportLogBtn").onclick = () => {
-    const log = readLog();
-    const rows = ["tileId,label,category,timestamp"].concat(
-      log.map(e => `${e.tileId},"${(e.label || "").replace(/"/g, '""')}",${e.category},${new Date(e.ts).toISOString()}`)
-    );
-    downloadBlob(rows.join("\n"), "text/csv", "freevoice-usage-log.csv");
+    downloadBlob(csvFromLog(readLog()), "text/csv", "freevoice-usage-log.csv");
   };
 
   // ---------- Backup export/import (full app state) ----------
@@ -856,7 +814,7 @@
         const imported = JSON.parse(reader.result);
         if (imported.categories) {
           state = imported;
-          migrateState();
+          migrateState(state);
           save();
           refreshCatSelect();
           renderAdminTileList();
@@ -871,73 +829,24 @@
   document.getElementById("printBtn").onclick = () => { window.print(); };
 
   // ---------- Open Board Format (.obf) import/export ----------
-  function exportOBF(catName) {
-    const tiles = state.categories[catName] || [];
-    const order = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(null));
-    const buttons = [], images = [];
-    tiles.forEach((t, i) => {
-      const btnId = "b" + i;
-      const btn = { id: btnId, label: t.label, vocalization: t.label };
-      if (t.image) {
-        btn.image_id = "img" + i;
-        images.push({ id: "img" + i, data: t.image, content_type: t.image.startsWith("data:image/png") ? "image/png" : "image/jpeg" });
-      }
-      buttons.push(btn);
-      const r = t.position.row, c = t.position.col;
-      if (order[r]) order[r][c] = btnId;
-    });
-    const obf = {
-      format: "open-board-0.1",
-      id: "freevoice-" + Date.now(),
-      locale: "en",
-      name: catName,
-      buttons, images,
-      grid: { rows: GRID_ROWS, columns: GRID_COLS, order }
-    };
+  document.getElementById("exportObfBtn").onclick = () => {
+    const catName = state.currentCategory;
+    const obf = buildOBF(state.categories[catName] || [], catName);
     downloadJSON(obf, catName.replace(/\s+/g, "_") + ".obf");
-  }
-
-  function importOBF(json) {
-    const imagesById = {};
-    (json.images || []).forEach(img => { imagesById[img.id] = img.data || img.url || null; });
-    const catName = json.name || ("Imported " + new Date().toLocaleDateString());
-    const tiles = [];
-    const order = json.grid && json.grid.order;
-    (json.buttons || []).forEach((btn, i) => {
-      let row = Math.floor(i / GRID_COLS), col = i % GRID_COLS, found = false;
-      if (order) {
-        for (let r = 0; r < order.length && !found; r++) {
-          for (let c = 0; c < order[r].length && !found; c++) {
-            if (order[r][c] === btn.id) { row = r; col = c; found = true; }
-          }
-        }
-      }
-      if (row >= GRID_ROWS || col >= GRID_COLS) { row = Math.floor(i / GRID_COLS) % GRID_ROWS; col = i % GRID_COLS; }
-      tiles.push({
-        id: "t" + Date.now() + "_" + i,
-        label: btn.label || btn.vocalization || "?",
-        image: btn.image_id ? (imagesById[btn.image_id] || null) : null,
-        audio: null,
-        partOfSpeech: "other",
-        position: { row, col }
-      });
-    });
-    state.categories[catName] = tiles;
-    state.currentCategory = catName;
-    save();
-    refreshCatSelect();
-    renderAdminTileList();
-    renderRearrange();
-  }
-
-  document.getElementById("exportObfBtn").onclick = () => exportOBF(state.currentCategory);
+  };
   document.getElementById("importObfFile").onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        importOBF(JSON.parse(reader.result));
+        const { catName, tiles } = parseOBF(JSON.parse(reader.result));
+        state.categories[catName] = tiles;
+        state.currentCategory = catName;
+        save();
+        refreshCatSelect();
+        renderAdminTileList();
+        renderRearrange();
         alert("Board imported as a new category.");
       } catch (err) { alert("Invalid .obf file."); }
     };

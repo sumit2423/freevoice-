@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FreeVoice — Core Logic Tests</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", monospace; background:#111; color:#eee; padding:24px; }
+  #summary { font-size:22px; font-weight:bold; margin-bottom:16px; }
+  .pass { color:#4ade80; }
+  .fail { color:#f87171; }
+  .case { padding:6px 0; border-bottom:1px solid #2a2a2a; font-size:14px; }
+  .case.fail { background:#2a1414; padding-left:8px; }
+</style>
+</head>
+<body>
+<div id="summary">Running…</div>
+<div id="results"></div>
+
+<script src="./freevoice-core.js"></script>
+<script>
+(function () {
+  "use strict";
+  const C = window.FreeVoiceCore;
+  const results = [];
+
+  function assertEqual(actual, expected, name) {
+    const pass = JSON.stringify(actual) === JSON.stringify(expected);
+    results.push({ name, pass, actual, expected });
+  }
+  function assertTrue(cond, name) {
+    results.push({ name, pass: !!cond, actual: cond, expected: true });
+  }
+
+  // ---- posKey ----
+  assertEqual(C.posKey({ row: 2, col: 3 }), "2,3", "posKey formats row,col as a string");
+
+  // ---- migrateState ----
+  (function () {
+    const state = { categories: { A: [
+      { id: "1", label: "X" },
+      { id: "2", label: "Y", position: { row: 0, col: 1 } }
+    ] } };
+    C.migrateState(state);
+    const t1 = state.categories.A.find(t => t.id === "1");
+    const t2 = state.categories.A.find(t => t.id === "2");
+    assertEqual(t1.position, { row: 0, col: 0 }, "migrateState assigns the first open slot to a tile missing a position");
+    assertEqual(t2.position, { row: 0, col: 1 }, "migrateState preserves an existing position");
+    assertEqual(t1.partOfSpeech, "other", "migrateState defaults a missing partOfSpeech to 'other'");
+  })();
+
+  (function () {
+    const state = { categories: { A: [
+      { id: "1", label: "X", position: { row: 0, col: 0 } },
+      { id: "2", label: "Y" }
+    ] } };
+    C.migrateState(state);
+    const t2 = state.categories.A.find(t => t.id === "2");
+    assertEqual(t2.position, { row: 0, col: 1 }, "migrateState skips a slot that's already occupied");
+  })();
+
+  // ---- nextEmptySlot ----
+  assertEqual(C.nextEmptySlot([]), { row: 0, col: 0 }, "nextEmptySlot on an empty category returns (0,0)");
+  (function () {
+    const tiles = [{ position: { row: 0, col: 0 } }, { position: { row: 0, col: 1 } }];
+    assertEqual(C.nextEmptySlot(tiles), { row: 0, col: 2 }, "nextEmptySlot returns the next open cell in row-major order");
+  })();
+  (function () {
+    const tiles = [];
+    for (let r = 0; r < C.GRID_ROWS; r++) for (let c = 0; c < C.GRID_COLS; c++) tiles.push({ position: { row: r, col: c } });
+    assertEqual(C.nextEmptySlot(tiles), null, "nextEmptySlot returns null once the grid is full");
+  })();
+
+  // ---- buildOBF / parseOBF round trip ----
+  (function () {
+    const tiles = [
+      { label: "Milk", image: "data:image/jpeg;base64,ABC", position: { row: 0, col: 0 } },
+      { label: "More", image: null, position: { row: 0, col: 1 } }
+    ];
+    const obf = C.buildOBF(tiles, "Test Board");
+    assertEqual(obf.name, "Test Board", "buildOBF sets the board name");
+    assertEqual(obf.buttons.length, 2, "buildOBF creates one button per tile");
+    assertEqual(obf.images.length, 1, "buildOBF only includes images for tiles that have one");
+
+    const { catName, tiles: parsedTiles } = C.parseOBF(obf);
+    assertEqual(catName, "Test Board", "parseOBF recovers the board name");
+    assertEqual(parsedTiles.length, 2, "parseOBF recovers all buttons as tiles");
+    assertEqual(parsedTiles[0].label, "Milk", "parseOBF recovers a tile's label");
+    assertEqual(parsedTiles[0].image, "data:image/jpeg;base64,ABC", "parseOBF round-trips embedded image data");
+    assertEqual(parsedTiles[0].position, { row: 0, col: 0 }, "parseOBF recovers grid position from grid.order");
+  })();
+
+  (function () {
+    // A button with no matching entry in grid.order should fall back to index-based placement.
+    const obf = { name: "No Grid", buttons: [{ id: "b0", label: "A" }, { id: "b1", label: "B" }], images: [] };
+    const { tiles } = C.parseOBF(obf);
+    assertEqual(tiles[0].position, { row: 0, col: 0 }, "parseOBF falls back to index-based position when grid.order is missing");
+    assertEqual(tiles[1].position, { row: 0, col: 1 }, "parseOBF index-based fallback advances column by column");
+  })();
+
+  // ---- capLog ----
+  (function () {
+    const log = Array.from({ length: 10 }, (_, i) => ({ ts: i }));
+    const capped = C.capLog(log, 5);
+    assertEqual(capped.length, 5, "capLog trims a log down to the max length");
+    assertEqual(capped[0].ts, 5, "capLog drops the oldest entries and keeps the newest");
+  })();
+  (function () {
+    const log = [{ ts: 1 }, { ts: 2 }];
+    assertEqual(C.capLog(log, 5).length, 2, "capLog leaves a short log untouched");
+  })();
+
+  // ---- csvFromLog ----
+  (function () {
+    const log = [{ tileId: "t1", label: 'Say "hi"', category: "Core", ts: 0 }];
+    const csv = C.csvFromLog(log);
+    assertTrue(csv.startsWith("tileId,label,category,timestamp"), "csvFromLog includes a header row");
+    assertTrue(csv.indexOf('""hi""') !== -1, "csvFromLog escapes embedded quotes per CSV rules");
+  })();
+
+  // ---- logStats ----
+  (function () {
+    const now = 1000000000;
+    const day = 24 * 60 * 60 * 1000;
+    const log = [{ ts: now - 1 * day }, { ts: now - 10 * day }];
+    const stats = C.logStats(log, now);
+    assertEqual(stats.totalAll, 2, "logStats counts all-time taps");
+    assertEqual(stats.totalWeek, 1, "logStats only counts taps from the last 7 days");
+  })();
+
+  // ---- topWords ----
+  (function () {
+    const log = [{ label: "More" }, { label: "More" }, { label: "Milk" }];
+    const top = C.topWords(log, 10);
+    assertEqual(top[0], ["More", 2], "topWords sorts by frequency descending");
+    assertEqual(top.length, 2, "topWords returns one entry per distinct label");
+  })();
+
+  // ---- render ----
+  const resultsEl = document.getElementById("results");
+  let passCount = 0;
+  results.forEach(r => {
+    if (r.pass) passCount++;
+    const div = document.createElement("div");
+    div.className = "case " + (r.pass ? "pass" : "fail");
+    div.textContent = (r.pass ? "✓ " : "✗ ") + r.name +
+      (r.pass ? "" : ` — expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)}`);
+    resultsEl.appendChild(div);
+  });
+  const summary = document.getElementById("summary");
+  summary.textContent = `${passCount} / ${results.length} passed`;
+  summary.className = passCount === results.length ? "pass" : "fail";
+  document.title = (passCount === results.length ? "PASS " : "FAIL ") + "— FreeVoice Core Tests";
+})();
+</script>
+</body>
+</html>
