@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>FreeVoice — Talk Board</title>
+<style>
+  :root {
+    --tile-radius: 18px;
+    --gap: 12px;
+    --accent: #2563eb;
+    --bg: #f4f6fb;
+    --panel: #ffffff;
+    --text: #1a1a1a;
+    --danger: #dc2626;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    overscroll-behavior: none; user-select: none;
+  }
+  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+  /* Sentence bar */
+  #sentenceBar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px; background: var(--panel);
+    border-bottom: 3px solid #e2e6ef; min-height: 72px;
+  }
+  #sentenceStrip {
+    flex: 1; display: flex; gap: 8px; overflow-x: auto; height: 64px;
+  }
+  #sentenceStrip .chip {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 60px; height: 60px; background: #eef2ff; border-radius: 10px;
+    font-size: 26px; flex-shrink: 0; padding: 2px;
+  }
+  #sentenceStrip .chip span { font-size: 10px; line-height: 1; }
+  .bar-btn {
+    border: none; border-radius: 12px; height: 60px; padding: 0 16px;
+    font-size: 16px; font-weight: 600; cursor: pointer; flex-shrink: 0;
+  }
+  #speakBtn { background: var(--accent); color: white; }
+  #clearBtn { background: #e5e7eb; color: #333; }
+  #gearBtn {
+    background: transparent; color: #9ca3af; font-size: 22px; height: 60px; width: 44px;
+    border: none; cursor: pointer;
+  }
+
+  /* Category tabs */
+  #tabs {
+    display: flex; gap: 6px; padding: 8px 10px; overflow-x: auto;
+    background: var(--panel); border-bottom: 1px solid #e2e6ef;
+  }
+  .tab {
+    padding: 8px 16px; border-radius: 999px; border: 2px solid #dbe1ee;
+    background: white; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  }
+  .tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  /* Grid */
+  #grid {
+    flex: 1; overflow-y: auto; padding: var(--gap);
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: var(--gap); align-content: start;
+  }
+  .tile {
+    background: var(--panel); border: 3px solid #d7deec; border-radius: var(--tile-radius);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    aspect-ratio: 1; cursor: pointer; padding: 6px; transition: opacity .2s, transform .1s;
+    overflow: hidden;
+  }
+  .tile:active { transform: scale(0.94); }
+  .tile.cooldown { opacity: 0.35; pointer-events: none; }
+  .tile img { width: 70%; height: 70%; object-fit: cover; border-radius: 10px; }
+  .tile .emoji { font-size: 46px; }
+  .tile .label { margin-top: 6px; font-size: 14px; font-weight: 700; text-align: center; }
+  .tile.add-tile { border-style: dashed; color: #9ca3af; font-size: 40px; }
+
+  /* Admin overlay */
+  #adminOverlay {
+    position: fixed; inset: 0; background: rgba(20,24,34,.92); color: white;
+    display: none; flex-direction: column; z-index: 50; padding: 20px; overflow-y: auto;
+  }
+  #adminOverlay.open { display: flex; }
+  #adminOverlay h2 { margin: 0 0 12px; }
+  .admin-row { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .admin-row label { display: flex; flex-direction: column; font-size: 13px; gap: 4px; flex: 1; min-width: 140px; }
+  input, select {
+    padding: 10px; border-radius: 8px; border: none; font-size: 15px;
+  }
+  button.admin-btn {
+    padding: 10px 16px; border-radius: 8px; border: none; font-size: 15px; font-weight: 600;
+    cursor: pointer; background: var(--accent); color: white;
+  }
+  button.admin-btn.secondary { background: #4b5563; }
+  button.admin-btn.danger { background: var(--danger); }
+  #adminTileList { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px,1fr)); gap: 10px; margin-top: 16px; }
+  #adminTileList .admin-tile { background: #2a3040; border-radius: 10px; padding: 8px; text-align: center; font-size: 12px; }
+  #adminTileList .admin-tile img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; }
+  #adminTileList .admin-tile button { margin-top: 4px; font-size: 11px; padding: 4px 6px; }
+  #pinScreen {
+    position: fixed; inset: 0; background: rgba(20,24,34,.97); color: white; z-index: 60;
+    display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  }
+  #pinScreen.open { display: flex; }
+  #pinDots { display: flex; gap: 14px; }
+  #pinDots div { width: 16px; height: 16px; border-radius: 50%; background: #444; }
+  #pinDots div.filled { background: var(--accent); }
+  #pinPad { display: grid; grid-template-columns: repeat(3, 64px); gap: 12px; }
+  #pinPad button { width: 64px; height: 64px; border-radius: 50%; border: none; font-size: 22px; background: #2a3040; color: white; }
+
+  @media print {
+    #sentenceBar, #tabs, #gearBtn { display: none !important; }
+    body { background: white; }
+    #grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+    .tile { border: 2px solid #999; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sentenceBar">
+    <div id="sentenceStrip"></div>
+    <button class="bar-btn" id="clearBtn">Clear</button>
+    <button class="bar-btn" id="speakBtn">🔊 Speak</button>
+    <button id="gearBtn" title="Admin">⚙</button>
+  </div>
+  <div id="tabs"></div>
+  <div id="grid"></div>
+</div>
+
+<div id="pinScreen">
+  <h2>Parent Mode</h2>
+  <div id="pinDots"></div>
+  <div id="pinPad"></div>
+  <button class="admin-btn secondary" id="pinCancel">Cancel</button>
+</div>
+
+<div id="adminOverlay">
+  <h2>Parent / Admin Mode</h2>
+  <div class="admin-row">
+    <label>Category
+      <select id="catSelect"></select>
+    </label>
+    <label>New category name
+      <input id="newCatName" placeholder="e.g. Kitchen">
+    </label>
+    <button class="admin-btn" id="addCatBtn">+ Add category</button>
+  </div>
+
+  <h3>Add a tile to this category</h3>
+  <div class="admin-row">
+    <label>Label (spoken text)
+      <input id="tileLabel" placeholder="e.g. Milk">
+    </label>
+    <label>Photo
+      <input id="tilePhoto" type="file" accept="image/*" capture="environment">
+    </label>
+    <label>Custom voice (optional)
+      <span style="display:flex; gap:6px;">
+        <button class="admin-btn secondary" id="recordBtn" type="button">🎙 Record</button>
+        <button class="admin-btn secondary" id="stopRecordBtn" type="button" disabled>■ Stop</button>
+      </span>
+    </label>
+  </div>
+  <div class="admin-row">
+    <button class="admin-btn" id="saveTileBtn">Save tile</button>
+    <span id="recordStatus" style="align-self:center; font-size:13px; color:#9ca3af;"></span>
+  </div>
+
+  <div id="adminTileList"></div>
+
+  <h3>Backup</h3>
+  <div class="admin-row">
+    <button class="admin-btn secondary" id="exportBtn">⬇ Export backup (.json)</button>
+    <label>Import backup
+      <input id="importFile" type="file" accept="application/json">
+    </label>
+    <button class="admin-btn secondary" id="printBtn">🖨 Print this category</button>
+  </div>
+
+  <div class="admin-row" style="margin-top:20px;">
+    <button class="admin-btn danger" id="closeAdminBtn">Done — back to Talker Mode</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const STORAGE_KEY = "freevoice-state-v1";
+  const PIN_KEY = "freevoice-pin";
+  const DEFAULT_PIN = "1234";
+  const COOLDOWN_TAPS = 3, COOLDOWN_WINDOW_MS = 5000, COOLDOWN_MS = 2200;
+
+  const defaultState = {
+    currentCategory: "Core Words",
+    categories: {
+      "Core Words": [
+        { id: "t1", label: "More", emoji: "➕" },
+        { id: "t2", label: "All Done", emoji: "✋" },
+        { id: "t3", label: "Yes", emoji: "✅" },
+        { id: "t4", label: "No", emoji: "❌" },
+        { id: "t5", label: "Help", emoji: "🆘" },
+        { id: "t6", label: "Water", emoji: "💧" },
+        { id: "t7", label: "Milk", emoji: "🥛" },
+        { id: "t8", label: "Toy", emoji: "🧸" }
+      ]
+    }
+  };
+
+  let state = load();
+  let tapLog = {}; // tileId -> [timestamps]
+  let mediaRecorder = null, recordedChunks = [], pendingAudio = null;
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return JSON.parse(JSON.stringify(defaultState));
+  }
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  // ---------- Talker Mode rendering ----------
+  const tabsEl = document.getElementById("tabs");
+  const gridEl = document.getElementById("grid");
+  const sentenceStrip = document.getElementById("sentenceStrip");
+  let sentence = [];
+
+  function renderTabs() {
+    tabsEl.innerHTML = "";
+    Object.keys(state.categories).forEach(cat => {
+      const b = document.createElement("button");
+      b.className = "tab" + (cat === state.currentCategory ? " active" : "");
+      b.textContent = cat;
+      b.onclick = () => { state.currentCategory = cat; save(); renderAll(); };
+      tabsEl.appendChild(b);
+    });
+  }
+
+  function speak(text) {
+    if (!("speechSynthesis" in window)) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.9;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }
+
+  function tileCooldownCheck(id) {
+    const now = Date.now();
+    tapLog[id] = (tapLog[id] || []).filter(t => now - t < COOLDOWN_WINDOW_MS);
+    tapLog[id].push(now);
+    return tapLog[id].length > COOLDOWN_TAPS;
+  }
+
+  function renderGrid() {
+    gridEl.innerHTML = "";
+    const tiles = state.categories[state.currentCategory] || [];
+    tiles.forEach(tile => {
+      const div = document.createElement("div");
+      div.className = "tile";
+      div.id = "tile-" + tile.id;
+      if (tile.image) {
+        const img = document.createElement("img");
+        img.src = tile.image;
+        div.appendChild(img);
+      } else {
+        const e = document.createElement("div");
+        e.className = "emoji";
+        e.textContent = tile.emoji || "🔷";
+        div.appendChild(e);
+      }
+      const label = document.createElement("div");
+      label.className = "label";
+      label.textContent = tile.label;
+      div.appendChild(label);
+
+      div.onclick = () => {
+        if (tileCooldownCheck(tile.id)) {
+          div.classList.add("cooldown");
+          setTimeout(() => div.classList.remove("cooldown"), COOLDOWN_MS);
+          return;
+        }
+        if (tile.audio) {
+          new Audio(tile.audio).play();
+        } else {
+          speak(tile.label);
+        }
+        sentence.push(tile);
+        renderSentence();
+      };
+      gridEl.appendChild(div);
+    });
+  }
+
+  function renderSentence() {
+    sentenceStrip.innerHTML = "";
+    sentence.forEach((tile, i) => {
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      if (tile.image) {
+        const img = document.createElement("img");
+        img.src = tile.image;
+        img.style.width = "32px"; img.style.height = "32px";
+        img.style.objectFit = "cover"; img.style.borderRadius = "6px";
+        chip.appendChild(img);
+      } else {
+        chip.textContent = tile.emoji || "🔷";
+      }
+      const span = document.createElement("span");
+      span.textContent = tile.label;
+      chip.appendChild(span);
+      chip.onclick = () => { sentence.splice(i, 1); renderSentence(); };
+      sentenceStrip.appendChild(chip);
+    });
+  }
+
+  document.getElementById("speakBtn").onclick = () => {
+    if (!sentence.length) return;
+    speak(sentence.map(t => t.label).join(" "));
+  };
+  document.getElementById("clearBtn").onclick = () => { sentence = []; renderSentence(); };
+
+  function renderAll() { renderTabs(); renderGrid(); renderSentence(); }
+  renderAll();
+
+  // ---------- PIN gate ----------
+  const pinScreen = document.getElementById("pinScreen");
+  const pinDots = document.getElementById("pinDots");
+  const pinPad = document.getElementById("pinPad");
+  let pinEntry = "";
+
+  function getPin() { return localStorage.getItem(PIN_KEY) || DEFAULT_PIN; }
+
+  function buildPinPad() {
+    pinDots.innerHTML = "";
+    for (let i = 0; i < 4; i++) {
+      const d = document.createElement("div");
+      pinDots.appendChild(d);
+    }
+    pinPad.innerHTML = "";
+    "123456789".split("").concat(["", "0", "⌫"]).forEach(k => {
+      const b = document.createElement("button");
+      b.textContent = k;
+      if (!k) { b.style.visibility = "hidden"; }
+      b.onclick = () => {
+        if (k === "⌫") { pinEntry = pinEntry.slice(0, -1); }
+        else if (k) { pinEntry += k; }
+        updatePinDots();
+        if (pinEntry.length === 4) checkPin();
+      };
+      pinPad.appendChild(b);
+    });
+  }
+  function updatePinDots() {
+    [...pinDots.children].forEach((d, i) => d.classList.toggle("filled", i < pinEntry.length));
+  }
+  function checkPin() {
+    if (pinEntry === getPin()) {
+      pinScreen.classList.remove("open");
+      pinEntry = "";
+      openAdmin();
+    } else {
+      setTimeout(() => { pinEntry = ""; updatePinDots(); }, 300);
+    }
+  }
+  document.getElementById("gearBtn").onclick = () => {
+    pinEntry = "";
+    buildPinPad();
+    pinScreen.classList.add("open");
+  };
+  document.getElementById("pinCancel").onclick = () => {
+    pinScreen.classList.remove("open");
+  };
+
+  // ---------- Admin mode ----------
+  const adminOverlay = document.getElementById("adminOverlay");
+  const catSelect = document.getElementById("catSelect");
+
+  function openAdmin() {
+    refreshCatSelect();
+    renderAdminTileList();
+    adminOverlay.classList.add("open");
+  }
+  document.getElementById("closeAdminBtn").onclick = () => {
+    adminOverlay.classList.remove("open");
+    renderAll();
+  };
+
+  function refreshCatSelect() {
+    catSelect.innerHTML = "";
+    Object.keys(state.categories).forEach(cat => {
+      const o = document.createElement("option");
+      o.value = cat; o.textContent = cat;
+      if (cat === state.currentCategory) o.selected = true;
+      catSelect.appendChild(o);
+    });
+  }
+  catSelect.onchange = () => { state.currentCategory = catSelect.value; renderAdminTileList(); };
+
+  document.getElementById("addCatBtn").onclick = () => {
+    const name = document.getElementById("newCatName").value.trim();
+    if (!name) return;
+    if (!state.categories[name]) state.categories[name] = [];
+    state.currentCategory = name;
+    document.getElementById("newCatName").value = "";
+    save();
+    refreshCatSelect();
+    renderAdminTileList();
+  };
+
+  function resizeImage(file, maxSize, cb) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        if (width > height) { height *= maxSize / width; width = maxSize; }
+        else { width *= maxSize / height; height = maxSize; }
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        cb(canvas.toDataURL("image/jpeg", 0.7));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // Voice recording
+  const recordStatus = document.getElementById("recordStatus");
+  document.getElementById("recordBtn").onclick = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordedChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: "audio/webm" });
+        const reader = new FileReader();
+        reader.onload = () => { pendingAudio = reader.result; recordStatus.textContent = "Voice recorded ✓"; };
+        reader.readAsDataURL(blob);
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mediaRecorder.start();
+      recordStatus.textContent = "Recording…";
+      document.getElementById("recordBtn").disabled = true;
+      document.getElementById("stopRecordBtn").disabled = false;
+    } catch (err) {
+      recordStatus.textContent = "Mic permission denied";
+    }
+  };
+  document.getElementById("stopRecordBtn").onclick = () => {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+    document.getElementById("recordBtn").disabled = false;
+    document.getElementById("stopRecordBtn").disabled = true;
+  };
+
+  let pendingImage = null;
+  document.getElementById("tilePhoto").onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    resizeImage(file, 300, dataUrl => { pendingImage = dataUrl; });
+  };
+
+  document.getElementById("saveTileBtn").onclick = () => {
+    const label = document.getElementById("tileLabel").value.trim();
+    if (!label) { alert("Please enter a label"); return; }
+    const tile = {
+      id: "t" + Date.now(),
+      label,
+      image: pendingImage || null,
+      audio: pendingAudio || null
+    };
+    if (!state.categories[state.currentCategory]) state.categories[state.currentCategory] = [];
+    state.categories[state.currentCategory].push(tile);
+    save();
+    pendingImage = null; pendingAudio = null;
+    document.getElementById("tileLabel").value = "";
+    document.getElementById("tilePhoto").value = "";
+    recordStatus.textContent = "";
+    renderAdminTileList();
+  };
+
+  function renderAdminTileList() {
+    const list = document.getElementById("adminTileList");
+    list.innerHTML = "";
+    (state.categories[state.currentCategory] || []).forEach(tile => {
+      const div = document.createElement("div");
+      div.className = "admin-tile";
+      div.innerHTML = tile.image
+        ? `<img src="${tile.image}">`
+        : `<div style="font-size:32px;">${tile.emoji || "🔷"}</div>`;
+      const label = document.createElement("div");
+      label.textContent = tile.label;
+      div.appendChild(label);
+      const del = document.createElement("button");
+      del.className = "admin-btn danger";
+      del.textContent = "Delete";
+      del.onclick = () => {
+        state.categories[state.currentCategory] = state.categories[state.currentCategory].filter(t => t.id !== tile.id);
+        save();
+        renderAdminTileList();
+      };
+      div.appendChild(del);
+      list.appendChild(div);
+    });
+  }
+
+  // Backup export/import
+  document.getElementById("exportBtn").onclick = () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "freevoice-backup.json";
+    a.click();
+  };
+  document.getElementById("importFile").onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const imported = JSON.parse(reader.result);
+        if (imported.categories) {
+          state = imported;
+          save();
+          refreshCatSelect();
+          renderAdminTileList();
+          alert("Backup imported.");
+        }
+      } catch (err) { alert("Invalid backup file."); }
+    };
+    reader.readAsText(file);
+  };
+  document.getElementById("printBtn").onclick = () => { window.print(); };
+
+})();
+</script>
+</body>
+</html>
