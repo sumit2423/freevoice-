@@ -47,7 +47,7 @@
   }
   #speakBtn { background: var(--accent); color: white; }
   #clearBtn { background: #e5e7eb; color: #333; }
-  #gearBtn, #fullscreenBtn {
+  #gearBtn, #fullscreenBtn, #helpBtn {
     background: transparent; color: #9ca3af; font-size: 20px; height: 60px; width: 44px;
     border: none; cursor: pointer; flex-shrink: 0;
   }
@@ -134,6 +134,22 @@
   .report-bar { background: var(--accent); height: 16px; border-radius: 4px; min-width: 2px; }
   .report-count { flex-shrink: 0; color: #9ca3af; }
 
+  /* Help overlay */
+  #helpOverlay {
+    position: fixed; inset: 0; background: rgba(20,24,34,.92); color: white;
+    display: none; flex-direction: column; z-index: 55; padding: 20px; overflow-y: auto;
+  }
+  #helpOverlay.open { display: flex; }
+  #helpOverlay h2 { margin: 0 0 12px; }
+  #helpOverlay h3 { margin: 20px 0 6px; border-top: 1px solid #3a4152; padding-top: 14px; }
+  #helpOverlay h3:first-of-type { border-top: none; padding-top: 0; }
+  #helpOverlay ul { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; }
+  #helpOverlay li { margin-bottom: 4px; }
+  #helpOverlay code { background: #2a3040; padding: 1px 6px; border-radius: 4px; }
+  #helpOverlay details { margin-top: 20px; border-top: 1px solid #3a4152; padding-top: 14px; }
+  #helpOverlay summary { cursor: pointer; font-weight: 600; }
+  #helpOverlay details ul { margin-top: 10px; }
+
   #pinScreen {
     position: fixed; inset: 0; background: rgba(20,24,34,.97); color: white; z-index: 60;
     display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
@@ -161,10 +177,58 @@
     <button class="bar-btn" id="clearBtn">Clear</button>
     <button class="bar-btn" id="speakBtn">🔊 Speak</button>
     <button id="fullscreenBtn" title="Fullscreen">⛶</button>
+    <button id="helpBtn" title="Help">❓</button>
     <button id="gearBtn" title="Admin">⚙</button>
   </div>
   <div id="tabs"></div>
   <div id="grid"></div>
+</div>
+
+<div id="helpOverlay">
+  <h2>How to use FreeVoice</h2>
+
+  <h3>Talking</h3>
+  <ul>
+    <li>Tap a tile to hear it and add it to the sentence bar at the top.</li>
+    <li>Tap <strong>🔊 Speak</strong> to read the whole sentence aloud.</li>
+    <li>Tap <strong>Clear</strong> to reset the sentence bar.</li>
+    <li>Tap a chip in the sentence bar to remove just that word.</li>
+    <li>Tap <strong>⛶</strong> to hide the browser bar (fullscreen) before handing the device over.</li>
+  </ul>
+
+  <h3>Adding tiles &amp; categories (Parent Mode)</h3>
+  <ul>
+    <li>Tap <strong>⚙</strong> and enter the PIN (default <code>1234</code>) to open Parent Mode.</li>
+    <li>Type a label, pick a part of speech (colors the tile), then either take/choose a photo or search for a symbol online.</li>
+    <li>Optionally record your own voice for that tile, then tap <strong>Save tile</strong> — it's placed in the next open grid slot automatically.</li>
+    <li>Add new categories (e.g. "Kitchen," "School") from the Categories section, and switch between them anytime from the tab bar.</li>
+  </ul>
+
+  <h3>Rearranging &amp; reports</h3>
+  <ul>
+    <li><strong>Rearrange tiles</strong>: tap a tile, then tap where it should go. Positions stay fixed otherwise, so they become muscle memory over time.</li>
+    <li><strong>Usage reports</strong>: see total taps, taps this week, and top words — useful to share with a speech therapist. Exportable as a CSV.</li>
+  </ul>
+
+  <h3>Backup &amp; sharing boards</h3>
+  <ul>
+    <li><strong>Export backup (.json)</strong>: everything — use this for your own backups and to restore later.</li>
+    <li><strong>Export board (.obf)</strong>: just the current category, in a format other AAC apps understand — use this to share a single board with someone else.</li>
+    <li><strong>Print this category</strong>: a paper version of the current board, for when a device isn't available.</li>
+  </ul>
+
+  <details>
+    <summary>Installing on a phone/tablet &amp; locking it to this app</summary>
+    <ul>
+      <li>Open this page in the device's browser, then use the browser menu → <strong>Add to Home Screen</strong>.</li>
+      <li><strong>Android</strong>: Settings → Security → Screen Pinning → turn on, then pin FreeVoice from the recent-apps view.</li>
+      <li><strong>iOS</strong>: Settings → Accessibility → Guided Access → turn on, then triple-click the side button while FreeVoice is open.</li>
+    </ul>
+  </details>
+
+  <div class="admin-row" style="margin-top:20px;">
+    <button class="admin-btn danger" id="closeHelpBtn">Close</button>
+  </div>
 </div>
 
 <div id="pinScreen">
@@ -449,6 +513,10 @@
     if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
     else document.exitFullscreen();
   };
+
+  const helpOverlay = document.getElementById("helpOverlay");
+  document.getElementById("helpBtn").onclick = () => helpOverlay.classList.add("open");
+  document.getElementById("closeHelpBtn").onclick = () => helpOverlay.classList.remove("open");
 
   function renderAll() { renderTabs(); renderGrid(); renderSentence(); }
   renderAll();
