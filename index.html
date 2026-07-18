@@ -943,8 +943,16 @@
   // ---------- PWA service worker + update banner ----------
   if ("serviceWorker" in navigator) {
     const hadController = !!navigator.serviceWorker.controller;
+    let swReg = null;
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js").catch(() => {});
+      navigator.serviceWorker.register("./sw.js").then(reg => { swReg = reg; }).catch(() => {});
+    });
+    // The browser checks for a new sw.js on its own schedule, which can be hours apart.
+    // Force a check whenever the app comes back to the foreground — phone lock/unlock,
+    // switching apps and back — so an update is discovered as soon as realistically possible
+    // instead of waiting on a cold, full app relaunch.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && swReg) swReg.update().catch(() => {});
     });
     let refreshing = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
