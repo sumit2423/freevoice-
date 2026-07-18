@@ -176,16 +176,30 @@ Prototype → usable, scalable, professional-grade AAC tool. This roadmap sequen
 
 ## Suggested sequencing
 
+The ordering below isn't just impact/effort — it also accounts for two things a flat priority list misses: **technical dependencies** (some changes are cheap now and expensive once there's more content built on top of the old shape) and **the fact that real usage with your son should start driving priorities, not just theory**.
+
+### 0. Right now
+**Test the current prototype with him.** Nothing below should be built further blind — everything past this point should be informed by how he actually responds to what's already live.
+
+### Immediate next — small changes that unblock better testing
+1. **1.6 PWA + kiosk lock.** Do this first, not last. It directly fixes "he swipes out of the app into the browser," which is probably the single biggest obstacle to getting clean testing sessions at all. Cheap, and every session after this produces more realistic data.
+2. **1.3 Fixed motor-planning grid.** Do this while there's only a handful of tiles. Migrating 8 tiles to fixed positions is trivial; migrating 60 (after the symbol library and OBF import land more content) is a real chore. This has a "do it while it's cheap" window that closes once 1.1/1.2 ship.
+3. **1.5 Usage logging.** Turn this on the moment real sessions start (step 0), not after. It's low effort, and every day it's delayed is word-frequency history you don't get back.
+
+### Once the core loop is validated
+4. **1.1 Symbol library.** Now that the layout is stable (step 2) and there's real signal on what he needs, expand vocabulary beyond what's photographable — abstract words, feelings, verbs.
+5. **1.4 Color coding.** Layer this on as the tile count grows from step 4 — most useful once there's enough vocabulary that visual grouping actually helps.
+6. **1.2 OBF import/export.** Once premade boards (bathroom routine, school day) or sharing your board with anyone else — even informally — becomes useful.
+
+### Phase 2 — let real pain points pick the order, not this doc
+Don't build these speculatively; pick based on what actually becomes the bottleneck:
+- Editing gets annoying without changes syncing to his tablet → **2.1 Sync**
+- Grid navigation itself seems hard for him vs. real-world context → **2.2 Visual scene displays**
+- A sibling or second family starts using the same install → **2.4 Multi-profile**
+- Distributing beyond your family to kids with motor challenges → **2.3 Switch access**
+
+### Phase 3 — gate on "am I actually giving this away yet"
+Licensing, privacy posture, and voice quality only matter once distribution beyond your household is imminent — no reason to front-load them:
 ```
-Phase 1 (in order of impact/effort ratio):
-  1.1 Symbol library → 1.2 OBF import → 1.3 Fixed grid → 1.4 Color coding → 1.5 Usage logging → 1.6 PWA/kiosk
-
-Phase 2 (pick based on what's blocking real use):
-  2.1 Sync (if multi-device is the pain point)
-  2.2 Visual scenes (if grid boards feel limiting for him specifically)
-  2.4 Multi-profile (prerequisite if sharing with other families soon)
-  2.3 Switch access (only if/when distributing beyond your family)
-
-Phase 3 (do before any public "give this away" push):
-  3.3 Licensing/community → 3.2 Privacy posture → 3.1 Voice quality (optional, cost trade-off)
+3.3 Licensing/community → 3.2 Privacy posture → 3.1 Voice quality (optional, cost trade-off)
 ```

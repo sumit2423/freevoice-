@@ -3,11 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#2563eb">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
 <title>FreeVoice — Talk Board</title>
 <style>
   :root {
     --tile-radius: 18px;
-    --gap: 12px;
+    --gap: 10px;
     --accent: #2563eb;
     --bg: #f4f6fb;
     --panel: #ffffff;
@@ -44,9 +47,9 @@
   }
   #speakBtn { background: var(--accent); color: white; }
   #clearBtn { background: #e5e7eb; color: #333; }
-  #gearBtn {
-    background: transparent; color: #9ca3af; font-size: 22px; height: 60px; width: 44px;
-    border: none; cursor: pointer;
+  #gearBtn, #fullscreenBtn {
+    background: transparent; color: #9ca3af; font-size: 20px; height: 60px; width: 44px;
+    border: none; cursor: pointer; flex-shrink: 0;
   }
 
   /* Category tabs */
@@ -60,11 +63,10 @@
   }
   .tab.active { background: var(--accent); color: white; border-color: var(--accent); }
 
-  /* Grid */
+  /* Grid (fixed matrix — positions set inline via JS) */
   #grid {
     flex: 1; overflow-y: auto; padding: var(--gap);
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: var(--gap); align-content: start;
+    display: grid; gap: var(--gap); align-content: start;
   }
   .tile {
     background: var(--panel); border: 3px solid #d7deec; border-radius: var(--tile-radius);
@@ -77,7 +79,7 @@
   .tile img { width: 70%; height: 70%; object-fit: cover; border-radius: 10px; }
   .tile .emoji { font-size: 46px; }
   .tile .label { margin-top: 6px; font-size: 14px; font-weight: 700; text-align: center; }
-  .tile.add-tile { border-style: dashed; color: #9ca3af; font-size: 40px; }
+  .tile-empty { visibility: hidden; }
 
   /* Admin overlay */
   #adminOverlay {
@@ -86,7 +88,9 @@
   }
   #adminOverlay.open { display: flex; }
   #adminOverlay h2 { margin: 0 0 12px; }
-  .admin-row { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  #adminOverlay h3 { margin: 24px 0 8px; border-top: 1px solid #3a4152; padding-top: 16px; }
+  #adminOverlay h3:first-of-type { border-top: none; padding-top: 0; }
+  .admin-row { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items: flex-end; }
   .admin-row label { display: flex; flex-direction: column; font-size: 13px; gap: 4px; flex: 1; min-width: 140px; }
   input, select {
     padding: 10px; border-radius: 8px; border: none; font-size: 15px;
@@ -97,10 +101,39 @@
   }
   button.admin-btn.secondary { background: #4b5563; }
   button.admin-btn.danger { background: var(--danger); }
+  button.admin-btn:disabled { opacity: .5; cursor: default; }
+  .hint { font-size: 12px; color: #9ca3af; }
+
   #adminTileList { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px,1fr)); gap: 10px; margin-top: 16px; }
-  #adminTileList .admin-tile { background: #2a3040; border-radius: 10px; padding: 8px; text-align: center; font-size: 12px; }
+  #adminTileList .admin-tile { background: #2a3040; border-radius: 10px; padding: 8px; text-align: center; font-size: 12px; border-top: 4px solid transparent; }
   #adminTileList .admin-tile img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; }
   #adminTileList .admin-tile button { margin-top: 4px; font-size: 11px; padding: 4px 6px; }
+  #adminTileList .admin-tile select { font-size: 11px; padding: 4px; width: 100%; margin-top: 4px; }
+
+  /* Symbol search results */
+  #symbolResults { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; max-height: 160px; overflow-y: auto; flex-shrink: 0; }
+  #symbolResults img {
+    width: 64px; height: 64px; object-fit: contain; background: white; border-radius: 8px;
+    padding: 4px; cursor: pointer; border: 3px solid transparent;
+  }
+  #symbolResults img.selected { border-color: var(--accent); }
+
+  /* Rearrange grid */
+  #rearrangeGrid { display: grid; gap: 6px; margin-top: 10px; }
+  .rearrange-cell {
+    background: #2a3040; border: 2px solid #3a4152; border-radius: 8px; min-height: 56px;
+    display: flex; align-items: center; justify-content: center; font-size: 11px; text-align: center;
+    cursor: pointer; padding: 4px;
+  }
+  .rearrange-cell.empty { border-style: dashed; color: #6b7280; }
+  .rearrange-cell.selected { border-color: var(--accent); background: #1e3a8a; }
+
+  /* Reports */
+  .report-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+  .report-label { width: 90px; flex-shrink: 0; text-align: right; }
+  .report-bar { background: var(--accent); height: 16px; border-radius: 4px; min-width: 2px; }
+  .report-count { flex-shrink: 0; color: #9ca3af; }
+
   #pinScreen {
     position: fixed; inset: 0; background: rgba(20,24,34,.97); color: white; z-index: 60;
     display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
@@ -115,8 +148,9 @@
   @media print {
     #sentenceBar, #tabs, #gearBtn { display: none !important; }
     body { background: white; }
-    #grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+    #grid { display: grid; grid-template-columns: repeat(5, 1fr); }
     .tile { border: 2px solid #999; break-inside: avoid; }
+    .tile-empty { display: none; }
   }
 </style>
 </head>
@@ -126,6 +160,7 @@
     <div id="sentenceStrip"></div>
     <button class="bar-btn" id="clearBtn">Clear</button>
     <button class="bar-btn" id="speakBtn">🔊 Speak</button>
+    <button id="fullscreenBtn" title="Fullscreen">⛶</button>
     <button id="gearBtn" title="Admin">⚙</button>
   </div>
   <div id="tabs"></div>
@@ -141,6 +176,8 @@
 
 <div id="adminOverlay">
   <h2>Parent / Admin Mode</h2>
+
+  <h3>Categories</h3>
   <div class="admin-row">
     <label>Category
       <select id="catSelect"></select>
@@ -156,6 +193,17 @@
     <label>Label (spoken text)
       <input id="tileLabel" placeholder="e.g. Milk">
     </label>
+    <label>Part of speech
+      <select id="tilePos">
+        <option value="other">Other</option>
+        <option value="noun">Noun</option>
+        <option value="verb">Verb</option>
+        <option value="descriptor">Descriptor</option>
+        <option value="social">Social</option>
+        <option value="pronoun">Pronoun</option>
+        <option value="question">Question</option>
+      </select>
+    </label>
     <label>Photo
       <input id="tilePhoto" type="file" accept="image/*" capture="environment">
     </label>
@@ -166,20 +214,47 @@
       </span>
     </label>
   </div>
+
+  <div class="admin-row">
+    <label style="min-width:220px;">Or search a symbol
+      <input id="symbolSearch" placeholder="e.g. happy, more, eat">
+    </label>
+    <button class="admin-btn secondary" id="symbolSearchBtn" type="button">🔍 Search</button>
+    <span id="symbolStatus" class="hint" style="align-self:center;"></span>
+  </div>
+  <div id="symbolResults"></div>
+  <div class="hint" style="margin-bottom:10px;">Symbols by <a href="https://arasaac.org" target="_blank" style="color:#93c5fd;">ARASAAC</a> (CC BY-NC-SA), requires internet to search.</div>
+
   <div class="admin-row">
     <button class="admin-btn" id="saveTileBtn">Save tile</button>
-    <span id="recordStatus" style="align-self:center; font-size:13px; color:#9ca3af;"></span>
+    <span id="recordStatus" class="hint" style="align-self:center;"></span>
   </div>
 
   <div id="adminTileList"></div>
 
-  <h3>Backup</h3>
+  <h3>Rearrange tiles <span class="hint">(tap a tile, then tap where it should go)</span></h3>
+  <button class="admin-btn secondary" id="rearrangeToggle" type="button">Show rearrange grid</button>
+  <div id="rearrangeGrid" style="display:none;"></div>
+
+  <h3>Usage reports</h3>
+  <div id="reportsContent"></div>
+  <div class="admin-row" style="margin-top:10px;">
+    <button class="admin-btn secondary" id="exportLogBtn">⬇ Export usage log (.csv)</button>
+  </div>
+
+  <h3>Backup &amp; interoperability</h3>
   <div class="admin-row">
     <button class="admin-btn secondary" id="exportBtn">⬇ Export backup (.json)</button>
     <label>Import backup
       <input id="importFile" type="file" accept="application/json">
     </label>
     <button class="admin-btn secondary" id="printBtn">🖨 Print this category</button>
+  </div>
+  <div class="admin-row">
+    <button class="admin-btn secondary" id="exportObfBtn">⬇ Export board (.obf)</button>
+    <label>Import board (.obf)
+      <input id="importObfFile" type="file" accept=".obf,application/json">
+    </label>
   </div>
 
   <div class="admin-row" style="margin-top:20px;">
@@ -193,28 +268,37 @@
 
   const STORAGE_KEY = "freevoice-state-v1";
   const PIN_KEY = "freevoice-pin";
+  const LOG_KEY = "freevoice-log-v1";
   const DEFAULT_PIN = "1234";
   const COOLDOWN_TAPS = 3, COOLDOWN_WINDOW_MS = 5000, COOLDOWN_MS = 2200;
+  const GRID_ROWS = 4, GRID_COLS = 5;
+  const MAX_LOG = 5000;
+
+  const POS_COLORS = {
+    noun: "#f5c542", verb: "#5fd07a", descriptor: "#5fb0f0",
+    social: "#f582b8", pronoun: "#b08af0", question: "#f07a5f", other: "#c8cdd8"
+  };
 
   const defaultState = {
     currentCategory: "Core Words",
     categories: {
       "Core Words": [
-        { id: "t1", label: "More", emoji: "➕" },
-        { id: "t2", label: "All Done", emoji: "✋" },
-        { id: "t3", label: "Yes", emoji: "✅" },
-        { id: "t4", label: "No", emoji: "❌" },
-        { id: "t5", label: "Help", emoji: "🆘" },
-        { id: "t6", label: "Water", emoji: "💧" },
-        { id: "t7", label: "Milk", emoji: "🥛" },
-        { id: "t8", label: "Toy", emoji: "🧸" }
+        { id: "t1", label: "More", emoji: "➕", position: { row: 0, col: 0 }, partOfSpeech: "other" },
+        { id: "t2", label: "All Done", emoji: "✋", position: { row: 0, col: 1 }, partOfSpeech: "other" },
+        { id: "t3", label: "Yes", emoji: "✅", position: { row: 0, col: 2 }, partOfSpeech: "other" },
+        { id: "t4", label: "No", emoji: "❌", position: { row: 0, col: 3 }, partOfSpeech: "other" },
+        { id: "t5", label: "Help", emoji: "🆘", position: { row: 0, col: 4 }, partOfSpeech: "other" },
+        { id: "t6", label: "Water", emoji: "💧", position: { row: 1, col: 0 }, partOfSpeech: "noun" },
+        { id: "t7", label: "Milk", emoji: "🥛", position: { row: 1, col: 1 }, partOfSpeech: "noun" },
+        { id: "t8", label: "Toy", emoji: "🧸", position: { row: 1, col: 2 }, partOfSpeech: "noun" }
       ]
     }
   };
 
   let state = load();
-  let tapLog = {}; // tileId -> [timestamps]
-  let mediaRecorder = null, recordedChunks = [], pendingAudio = null;
+  migrateState();
+  let tapLog = {}; // tileId -> [timestamps], in-memory fatigue filter (not the persisted usage log)
+  let mediaRecorder = null, recordedChunks = [], pendingAudio = null, pendingImage = null;
 
   function load() {
     try {
@@ -227,11 +311,55 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
+  function posKey(pos) { return pos.row + "," + pos.col; }
+
+  function migrateState() {
+    Object.keys(state.categories).forEach(cat => {
+      const tiles = state.categories[cat];
+      const used = new Set();
+      tiles.forEach(t => { if (t.position) used.add(posKey(t.position)); });
+      let cursor = 0;
+      tiles.forEach(t => {
+        if (!t.partOfSpeech) t.partOfSpeech = "other";
+        if (!t.position) {
+          while (used.has(posKey({ row: Math.floor(cursor / GRID_COLS), col: cursor % GRID_COLS }))) cursor++;
+          const p = { row: Math.floor(cursor / GRID_COLS), col: cursor % GRID_COLS };
+          t.position = p;
+          used.add(posKey(p));
+          cursor++;
+        }
+      });
+    });
+  }
+
+  function nextEmptySlot(catName) {
+    const tiles = state.categories[catName] || [];
+    const used = new Set(tiles.map(t => posKey(t.position)));
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        if (!used.has(r + "," + c)) return { row: r, col: c };
+      }
+    }
+    return null;
+  }
+
+  function downloadBlob(content, mime, filename) {
+    const blob = new Blob([content], { type: mime });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+  }
+  function downloadJSON(obj, filename) { downloadBlob(JSON.stringify(obj, null, 2), "application/json", filename); }
+
   // ---------- Talker Mode rendering ----------
   const tabsEl = document.getElementById("tabs");
   const gridEl = document.getElementById("grid");
   const sentenceStrip = document.getElementById("sentenceStrip");
   let sentence = [];
+
+  gridEl.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
+  gridEl.style.gridTemplateRows = `repeat(${GRID_ROWS}, 1fr)`;
 
   function renderTabs() {
     tabsEl.innerHTML = "";
@@ -259,44 +387,69 @@
     return tapLog[id].length > COOLDOWN_TAPS;
   }
 
+  function logTap(tile) {
+    let log = [];
+    try { log = JSON.parse(localStorage.getItem(LOG_KEY) || "[]"); } catch (e) {}
+    log.push({ tileId: tile.id, label: tile.label, category: state.currentCategory, ts: Date.now() });
+    if (log.length > MAX_LOG) log = log.slice(log.length - MAX_LOG);
+    localStorage.setItem(LOG_KEY, JSON.stringify(log));
+  }
+
+  function buildTileEl(tile) {
+    const div = document.createElement("div");
+    div.className = "tile";
+    div.id = "tile-" + tile.id;
+    div.style.borderColor = POS_COLORS[tile.partOfSpeech || "other"];
+    if (tile.image) {
+      const img = document.createElement("img");
+      img.src = tile.image;
+      div.appendChild(img);
+    } else {
+      const e = document.createElement("div");
+      e.className = "emoji";
+      e.textContent = tile.emoji || "🔷";
+      div.appendChild(e);
+    }
+    const label = document.createElement("div");
+    label.className = "label";
+    label.textContent = tile.label;
+    div.appendChild(label);
+    return div;
+  }
+
   function renderGrid() {
     gridEl.innerHTML = "";
     const tiles = state.categories[state.currentCategory] || [];
-    tiles.forEach(tile => {
-      const div = document.createElement("div");
-      div.className = "tile";
-      div.id = "tile-" + tile.id;
-      if (tile.image) {
-        const img = document.createElement("img");
-        img.src = tile.image;
-        div.appendChild(img);
-      } else {
-        const e = document.createElement("div");
-        e.className = "emoji";
-        e.textContent = tile.emoji || "🔷";
-        div.appendChild(e);
+    const byPos = {};
+    tiles.forEach(t => { byPos[posKey(t.position)] = t; });
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        const tile = byPos[r + "," + c];
+        if (!tile) {
+          const spacer = document.createElement("div");
+          spacer.className = "tile-empty";
+          gridEl.appendChild(spacer);
+          continue;
+        }
+        const div = buildTileEl(tile);
+        div.onclick = () => {
+          if (tileCooldownCheck(tile.id)) {
+            div.classList.add("cooldown");
+            setTimeout(() => div.classList.remove("cooldown"), COOLDOWN_MS);
+            return;
+          }
+          logTap(tile);
+          if (tile.audio) {
+            new Audio(tile.audio).play();
+          } else {
+            speak(tile.label);
+          }
+          sentence.push(tile);
+          renderSentence();
+        };
+        gridEl.appendChild(div);
       }
-      const label = document.createElement("div");
-      label.className = "label";
-      label.textContent = tile.label;
-      div.appendChild(label);
-
-      div.onclick = () => {
-        if (tileCooldownCheck(tile.id)) {
-          div.classList.add("cooldown");
-          setTimeout(() => div.classList.remove("cooldown"), COOLDOWN_MS);
-          return;
-        }
-        if (tile.audio) {
-          new Audio(tile.audio).play();
-        } else {
-          speak(tile.label);
-        }
-        sentence.push(tile);
-        renderSentence();
-      };
-      gridEl.appendChild(div);
-    });
+    }
   }
 
   function renderSentence() {
@@ -326,6 +479,10 @@
     speak(sentence.map(t => t.label).join(" "));
   };
   document.getElementById("clearBtn").onclick = () => { sentence = []; renderSentence(); };
+  document.getElementById("fullscreenBtn").onclick = () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+    else document.exitFullscreen();
+  };
 
   function renderAll() { renderTabs(); renderGrid(); renderSentence(); }
   renderAll();
@@ -386,11 +543,15 @@
   function openAdmin() {
     refreshCatSelect();
     renderAdminTileList();
+    renderReports();
+    document.getElementById("rearrangeGrid").style.display = "none";
+    document.getElementById("rearrangeToggle").textContent = "Show rearrange grid";
     adminOverlay.classList.add("open");
   }
   document.getElementById("closeAdminBtn").onclick = () => {
     adminOverlay.classList.remove("open");
     renderAll();
+    document.documentElement.requestFullscreen().catch(() => {});
   };
 
   function refreshCatSelect() {
@@ -402,7 +563,12 @@
       catSelect.appendChild(o);
     });
   }
-  catSelect.onchange = () => { state.currentCategory = catSelect.value; renderAdminTileList(); };
+  catSelect.onchange = () => {
+    state.currentCategory = catSelect.value;
+    renderAdminTileList();
+    renderRearrange();
+    renderReports();
+  };
 
   document.getElementById("addCatBtn").onclick = () => {
     const name = document.getElementById("newCatName").value.trim();
@@ -413,24 +579,27 @@
     save();
     refreshCatSelect();
     renderAdminTileList();
+    renderRearrange();
   };
 
-  function resizeImage(file, maxSize, cb) {
+  function resizeImage(file, maxSize, mime, cb) {
     const reader = new FileReader();
-    reader.onload = e => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let { width, height } = img;
-        if (width > height) { height *= maxSize / width; width = maxSize; }
-        else { width *= maxSize / height; height = maxSize; }
-        canvas.width = width; canvas.height = height;
-        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-        cb(canvas.toDataURL("image/jpeg", 0.7));
-      };
-      img.src = e.target.result;
-    };
+    reader.onload = e => resizeDataUrl(e.target.result, maxSize, mime, cb);
     reader.readAsDataURL(file);
+  }
+  function resizeDataUrl(dataUrl, maxSize, mime, cb) {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let { width, height } = img;
+      if (width > height) { height *= maxSize / width; width = maxSize; }
+      else { width *= maxSize / height; height = maxSize; }
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      cb(canvas.toDataURL(mime, 0.85));
+    };
+    img.onerror = () => cb(null);
+    img.src = dataUrl;
   }
 
   // Voice recording
@@ -462,21 +631,72 @@
     document.getElementById("stopRecordBtn").disabled = true;
   };
 
-  let pendingImage = null;
   document.getElementById("tilePhoto").onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    resizeImage(file, 300, dataUrl => { pendingImage = dataUrl; });
+    resizeImage(file, 300, "image/jpeg", dataUrl => { pendingImage = dataUrl; });
+  };
+
+  // ---------- Symbol search (ARASAAC) ----------
+  const symbolStatus = document.getElementById("symbolStatus");
+  const symbolResults = document.getElementById("symbolResults");
+
+  async function searchSymbols(query) {
+    try {
+      const res = await fetch(`https://api.arasaac.org/api/pictograms/en/search/${encodeURIComponent(query)}`);
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (e) { return []; }
+  }
+
+  document.getElementById("symbolSearchBtn").onclick = async () => {
+    const q = document.getElementById("symbolSearch").value.trim();
+    if (!q) return;
+    symbolStatus.textContent = "Searching…";
+    symbolResults.innerHTML = "";
+    const results = await searchSymbols(q);
+    symbolStatus.textContent = results.length ? `${results.length} results` : "No results / offline";
+    results.slice(0, 24).forEach(r => {
+      const url = `https://static.arasaac.org/pictograms/${r._id}/${r._id}_300.png`;
+      const img = document.createElement("img");
+      img.src = url;
+      img.title = (r.keywords && r.keywords[0] && r.keywords[0].keyword) || q;
+      img.onclick = async () => {
+        [...symbolResults.children].forEach(el => el.classList.remove("selected"));
+        img.classList.add("selected");
+        symbolStatus.textContent = "Loading symbol…";
+        try {
+          const resp = await fetch(url);
+          const blob = await resp.blob();
+          const reader = new FileReader();
+          reader.onload = () => {
+            resizeDataUrl(reader.result, 300, "image/png", dataUrl => {
+              pendingImage = dataUrl || url;
+              symbolStatus.textContent = "Symbol selected ✓";
+            });
+          };
+          reader.readAsDataURL(blob);
+        } catch (e) {
+          pendingImage = url; // fallback: direct URL, works only while online
+          symbolStatus.textContent = "Symbol selected (online only) ✓";
+        }
+      };
+      symbolResults.appendChild(img);
+    });
   };
 
   document.getElementById("saveTileBtn").onclick = () => {
     const label = document.getElementById("tileLabel").value.trim();
     if (!label) { alert("Please enter a label"); return; }
+    const slot = nextEmptySlot(state.currentCategory);
+    if (!slot) { alert("This board is full (20 tiles). Delete a tile or rearrange first."); return; }
     const tile = {
       id: "t" + Date.now(),
       label,
       image: pendingImage || null,
-      audio: pendingAudio || null
+      audio: pendingAudio || null,
+      partOfSpeech: document.getElementById("tilePos").value,
+      position: slot
     };
     if (!state.categories[state.currentCategory]) state.categories[state.currentCategory] = [];
     state.categories[state.currentCategory].push(tile);
@@ -484,8 +704,13 @@
     pendingImage = null; pendingAudio = null;
     document.getElementById("tileLabel").value = "";
     document.getElementById("tilePhoto").value = "";
+    document.getElementById("symbolSearch").value = "";
+    document.getElementById("tilePos").value = "other";
+    symbolResults.innerHTML = "";
+    symbolStatus.textContent = "";
     recordStatus.textContent = "";
     renderAdminTileList();
+    renderRearrange();
   };
 
   function renderAdminTileList() {
@@ -494,12 +719,28 @@
     (state.categories[state.currentCategory] || []).forEach(tile => {
       const div = document.createElement("div");
       div.className = "admin-tile";
+      div.style.borderTopColor = POS_COLORS[tile.partOfSpeech || "other"];
       div.innerHTML = tile.image
         ? `<img src="${tile.image}">`
         : `<div style="font-size:32px;">${tile.emoji || "🔷"}</div>`;
       const label = document.createElement("div");
       label.textContent = tile.label;
       div.appendChild(label);
+
+      const posSelect = document.createElement("select");
+      ["other", "noun", "verb", "descriptor", "social", "pronoun", "question"].forEach(p => {
+        const o = document.createElement("option");
+        o.value = p; o.textContent = p;
+        if ((tile.partOfSpeech || "other") === p) o.selected = true;
+        posSelect.appendChild(o);
+      });
+      posSelect.onchange = () => {
+        tile.partOfSpeech = posSelect.value;
+        save();
+        div.style.borderTopColor = POS_COLORS[tile.partOfSpeech];
+      };
+      div.appendChild(posSelect);
+
       const del = document.createElement("button");
       del.className = "admin-btn danger";
       del.textContent = "Delete";
@@ -507,20 +748,105 @@
         state.categories[state.currentCategory] = state.categories[state.currentCategory].filter(t => t.id !== tile.id);
         save();
         renderAdminTileList();
+        renderRearrange();
       };
       div.appendChild(del);
       list.appendChild(div);
     });
   }
 
-  // Backup export/import
-  document.getElementById("exportBtn").onclick = () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "freevoice-backup.json";
-    a.click();
+  // ---------- Rearrange (fixed motor-planning grid) ----------
+  const rearrangeGrid = document.getElementById("rearrangeGrid");
+  let rearrangeSelected = null;
+
+  rearrangeGrid.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`;
+
+  document.getElementById("rearrangeToggle").onclick = () => {
+    const showing = rearrangeGrid.style.display !== "none";
+    rearrangeGrid.style.display = showing ? "none" : "grid";
+    document.getElementById("rearrangeToggle").textContent = showing ? "Show rearrange grid" : "Hide rearrange grid";
+    if (!showing) renderRearrange();
   };
+
+  function renderRearrange() {
+    if (rearrangeGrid.style.display === "none") return;
+    rearrangeGrid.innerHTML = "";
+    const tiles = state.categories[state.currentCategory] || [];
+    const byPos = {};
+    tiles.forEach(t => { byPos[posKey(t.position)] = t; });
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        const tile = byPos[r + "," + c];
+        const cell = document.createElement("div");
+        cell.className = "rearrange-cell" + (tile ? "" : " empty") + (tile && rearrangeSelected === tile.id ? " selected" : "");
+        cell.textContent = tile ? tile.label : "+";
+        cell.onclick = () => {
+          if (tile) {
+            if (rearrangeSelected === tile.id) {
+              rearrangeSelected = null;
+            } else if (rearrangeSelected) {
+              const other = tiles.find(t => t.id === rearrangeSelected);
+              const tmp = other.position;
+              other.position = tile.position;
+              tile.position = tmp;
+              rearrangeSelected = null;
+              save();
+            } else {
+              rearrangeSelected = tile.id;
+            }
+          } else if (rearrangeSelected) {
+            const other = tiles.find(t => t.id === rearrangeSelected);
+            other.position = { row: r, col: c };
+            rearrangeSelected = null;
+            save();
+          }
+          renderRearrange();
+        };
+        rearrangeGrid.appendChild(cell);
+      }
+    }
+  }
+
+  // ---------- Usage reports ----------
+  function readLog() {
+    try { return JSON.parse(localStorage.getItem(LOG_KEY) || "[]"); } catch (e) { return []; }
+  }
+
+  function renderReports() {
+    const log = readLog();
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const totalAll = log.length;
+    const totalWeek = log.filter(e => e.ts >= weekAgo).length;
+    const counts = {};
+    log.forEach(e => { counts[e.label] = (counts[e.label] || 0) + 1; });
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const maxCount = top.length ? top[0][1] : 1;
+
+    const el = document.getElementById("reportsContent");
+    el.innerHTML = `<div>Total taps (all time): <strong>${totalAll}</strong></div>
+      <div style="margin-bottom:10px;">Taps in last 7 days: <strong>${totalWeek}</strong></div>`;
+    if (!top.length) {
+      el.innerHTML += `<div class="hint">No usage yet — taps in Talker Mode will show up here.</div>`;
+      return;
+    }
+    top.forEach(([label, count]) => {
+      const row = document.createElement("div");
+      row.className = "report-row";
+      row.innerHTML = `<span class="report-label">${label}</span><div class="report-bar" style="width:${(count / maxCount * 140)}px;"></div><span class="report-count">${count}</span>`;
+      el.appendChild(row);
+    });
+  }
+
+  document.getElementById("exportLogBtn").onclick = () => {
+    const log = readLog();
+    const rows = ["tileId,label,category,timestamp"].concat(
+      log.map(e => `${e.tileId},"${(e.label || "").replace(/"/g, '""')}",${e.category},${new Date(e.ts).toISOString()}`)
+    );
+    downloadBlob(rows.join("\n"), "text/csv", "freevoice-usage-log.csv");
+  };
+
+  // ---------- Backup export/import (full app state) ----------
+  document.getElementById("exportBtn").onclick = () => downloadJSON(state, "freevoice-backup.json");
   document.getElementById("importFile").onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -530,9 +856,12 @@
         const imported = JSON.parse(reader.result);
         if (imported.categories) {
           state = imported;
+          migrateState();
           save();
           refreshCatSelect();
           renderAdminTileList();
+          renderRearrange();
+          renderReports();
           alert("Backup imported.");
         }
       } catch (err) { alert("Invalid backup file."); }
@@ -540,6 +869,87 @@
     reader.readAsText(file);
   };
   document.getElementById("printBtn").onclick = () => { window.print(); };
+
+  // ---------- Open Board Format (.obf) import/export ----------
+  function exportOBF(catName) {
+    const tiles = state.categories[catName] || [];
+    const order = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(null));
+    const buttons = [], images = [];
+    tiles.forEach((t, i) => {
+      const btnId = "b" + i;
+      const btn = { id: btnId, label: t.label, vocalization: t.label };
+      if (t.image) {
+        btn.image_id = "img" + i;
+        images.push({ id: "img" + i, data: t.image, content_type: t.image.startsWith("data:image/png") ? "image/png" : "image/jpeg" });
+      }
+      buttons.push(btn);
+      const r = t.position.row, c = t.position.col;
+      if (order[r]) order[r][c] = btnId;
+    });
+    const obf = {
+      format: "open-board-0.1",
+      id: "freevoice-" + Date.now(),
+      locale: "en",
+      name: catName,
+      buttons, images,
+      grid: { rows: GRID_ROWS, columns: GRID_COLS, order }
+    };
+    downloadJSON(obf, catName.replace(/\s+/g, "_") + ".obf");
+  }
+
+  function importOBF(json) {
+    const imagesById = {};
+    (json.images || []).forEach(img => { imagesById[img.id] = img.data || img.url || null; });
+    const catName = json.name || ("Imported " + new Date().toLocaleDateString());
+    const tiles = [];
+    const order = json.grid && json.grid.order;
+    (json.buttons || []).forEach((btn, i) => {
+      let row = Math.floor(i / GRID_COLS), col = i % GRID_COLS, found = false;
+      if (order) {
+        for (let r = 0; r < order.length && !found; r++) {
+          for (let c = 0; c < order[r].length && !found; c++) {
+            if (order[r][c] === btn.id) { row = r; col = c; found = true; }
+          }
+        }
+      }
+      if (row >= GRID_ROWS || col >= GRID_COLS) { row = Math.floor(i / GRID_COLS) % GRID_ROWS; col = i % GRID_COLS; }
+      tiles.push({
+        id: "t" + Date.now() + "_" + i,
+        label: btn.label || btn.vocalization || "?",
+        image: btn.image_id ? (imagesById[btn.image_id] || null) : null,
+        audio: null,
+        partOfSpeech: "other",
+        position: { row, col }
+      });
+    });
+    state.categories[catName] = tiles;
+    state.currentCategory = catName;
+    save();
+    refreshCatSelect();
+    renderAdminTileList();
+    renderRearrange();
+  }
+
+  document.getElementById("exportObfBtn").onclick = () => exportOBF(state.currentCategory);
+  document.getElementById("importObfFile").onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        importOBF(JSON.parse(reader.result));
+        alert("Board imported as a new category.");
+      } catch (err) { alert("Invalid .obf file."); }
+    };
+    reader.readAsText(file);
+  };
+
+  // ---------- PWA service worker ----------
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch(() => {});
+    });
+  }
 
 })();
 </script>
